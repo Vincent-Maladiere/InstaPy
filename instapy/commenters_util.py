@@ -304,7 +304,7 @@ def users_liked(browser, photo_url, amount=100, logger=None):
     try:
         web_address_navigator(browser, photo_url)
         photo_likers = likers_from_photo(browser, amount, logger)
-        sleep(2)
+        sleep(3)
     except NoSuchElementException:
         logger.info(
             "Could not get information from post: {} nothing to return".format(
@@ -362,13 +362,13 @@ def likers_from_photo(browser, amount=20, logger=None):
             logger.info("Trying again for some image, moving on...")
             return []
 
-        sleep(1)
+        sleep(3)
         click_element(browser, element_to_click)
         logger.info("Opening likes...")
 
         # update server calls
         update_activity(browser, state=None)
-        sleep(1)
+        sleep(3)
 
         # get a reference to the 'Likes' dialog box
         dialog = browser.find_element_by_xpath(
@@ -381,7 +381,7 @@ def likers_from_photo(browser, amount=20, logger=None):
             "arguments[0].scrollTop = arguments[0].scrollHeight", dialog
         )
         update_activity(browser, state=None)
-        sleep(1)
+        sleep(3)
 
         start_time = time.time()
         user_list = []
@@ -401,6 +401,7 @@ def likers_from_photo(browser, amount=20, logger=None):
 
             previous_len = len(user_list)
             scroll_bottom(browser, dialog, 2)
+            sleep(3)
 
             user_list = get_users_from_dialog(user_list, dialog, logger)
 
@@ -409,7 +410,7 @@ def likers_from_photo(browser, amount=20, logger=None):
             print("\n")
 
         random.shuffle(user_list)
-        sleep(1)
+        sleep(3)
 
         close_dialog_box(browser)
 

@@ -153,7 +153,8 @@ xpath["get_users_through_dialog"] = {"find_dialog_box": "//body/div[4]/div/div[2
 xpath["is_private_profile"] = {"is_private": '//h2[@class="_kcrwx"]'}
 
 xpath["like_comment"] = {
-    "comments_block": "//*[contains(@class,'EtaWk')]",
+    "view_all_comments": "//div[2]/div[1]/a",
+    "comments_block": "//*[contains(@class,'Mr508')]",
     "span_like_elements": "//span[@aria-label='Like']",
     "comment_like_button": "..",
 }

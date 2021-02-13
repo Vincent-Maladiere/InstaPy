@@ -27,11 +27,52 @@ from .follow_util import get_following_status
 from .event import Event
 from .xpath import read_xpath
 from .comment_util import open_comment_section
+from .commenters_util import check_exists_by_xpath
 
 # import exceptions
 from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import StaleElementReferenceException
+
+
+def view_all_comments(browser, comment_per_post, logger):
+    
+    view_all_comments_XPath = read_xpath(
+        like_comment.__name__, "view_all_comments"
+    )
+    if not check_exists_by_xpath(browser, view_all_comments_XPath):
+        logger.info("Not enough comments for 'view all comments'")
+        return
+    view_link = browser.find_element_by_xpath(view_all_comments_XPath)
+    click_element(browser, view_link)
+    logger.info("Clicked on view all comments")
+
+    # wait for the page to fully load
+    explicit_wait(browser, "PFL", None, logger)
+
+    # click on see more comments to reach comment per post
+    comment_per_page = 12
+    click_number = comment_per_post // comment_per_page
+    load_more_comments_XPath = read_xpath("extract_post_info", "load_more_comments_element")
+
+    for idx in range(click_number):
+
+        if check_exists_by_xpath(browser, load_more_comments_XPath):
+            load_more_button = browser.find_element_by_xpath(load_more_comments_XPath)
+
+            if load_more_button:
+
+                if isinstance(load_more_button, list):
+                    load_more_button = load_more_button[0]
+
+                click_element(browser, load_more_button)
+                logger.info(f"Load more comments [{idx+1} / {click_number}]")
+
+                sleep(random.uniform(1, 2))
+
+        return
+
+    return 
 
 
 def get_links_from_feed(browser, amount, num_of_search, logger):
@@ -991,18 +1032,17 @@ def like_comment(browser, original_comment_text, logger):
 
             if comment and (comment == original_comment_text):
                 # find "Like" span (a direct child of Like button)
-                span_like_elements = comment_line.find_elements_by_xpath(
-                    read_xpath(like_comment.__name__, "span_like_elements")
-                )
-                if not span_like_elements:
-                    # this is most likely a liked comment
+                like_button_XPath = read_xpath("get_comments_on_post", "like_button_full_XPath")
+                comment_like_button = comment_line.find_elements_by_xpath(like_button_XPath)
+
+                if not comment_like_button:
+                    logger.info("--> No apparent likeable comment left")
+                    sleep(random.uniform(1, 2))
                     return True, "success"
 
-                # like the given comment
-                span_like = span_like_elements[0]
-                comment_like_button = span_like.find_element_by_xpath(
-                    read_xpath(like_comment.__name__, "comment_like_button")
-                )
+                if isinstance(comment_like_button, list):
+                    comment_like_button = comment_like_button[0]
+
                 click_element(browser, comment_like_button)
 
                 # verify if like succeeded by waiting until the like button

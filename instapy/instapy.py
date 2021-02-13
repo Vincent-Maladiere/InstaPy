@@ -9,6 +9,7 @@ import requests
 import unicodedata
 import logging
 import logging.handlers
+import pandas as pd
 
 from datetime import datetime
 from datetime import timedelta
@@ -43,12 +44,14 @@ from .like_util import get_links_for_location
 from .like_util import like_image
 from .like_util import get_links_for_username
 from .like_util import like_comment
+from .like_util import view_all_comments
 from .story_util import watch_story
 from .login_util import login_user
 from .settings import Settings
 from .settings import localize_path
 from .print_log_writer import log_follower_num
 from .print_log_writer import log_following_num
+from .print_log_writer import log_record_seed_username
 from .time_util import sleep
 from .time_util import set_sleep_percentage
 from .util import get_active_users
@@ -277,6 +280,39 @@ class InstaPy:
         self.skip_private_percentage = 100
         self.relationship_data = {username: {"all_following": [], "all_followers": []}}
 
+        self.follow_potency_ratio = None  # 1.3466
+        self.follow_delimit_by_numbers = None
+
+        self.follow_max_followers = None  # 90000
+        self.follow_max_following = None  # 66834
+        self.follow_min_followers = None  # 35
+        self.follow_min_following = None  # 27
+
+        #self.follow_delimit_liking = False
+        #self.follow_liking_approved = True
+        #self.follow_max_likes = 1000
+        #self.follow_min_likes = 0
+
+        #self.follow_delimit_commenting = False
+        #self.follow_commenting_approved = True
+        #self.follow_max_comments = 35
+        #self.follow_min_comments = 0
+        #self.follow_comments_mandatory_words = []
+        self.follow_max_posts = None
+        self.follow_min_posts = None
+        self.follow_skip_business_categories = []
+        self.follow_skip_bio_keyword = []
+        self.follow_mandatory_bio_keywords = []
+        self.follow_dont_skip_business_categories = []
+        self.follow_skip_business = False
+        self.follow_skip_non_business = False
+        self.follow_skip_no_profile_pic = False
+        self.follow_skip_private = True
+        self.follow_skip_business_percentage = 100
+        self.follow_skip_no_profile_pic_percentage = 100
+        self.follow_skip_private_percentage = 100
+        self.follow_relationship_data = {username: {"all_following": [], "all_followers": []}}
+
         self.simulation = {"enabled": True, "percentage": 100}
 
         self.mandatory_language = False
@@ -339,6 +375,79 @@ class InstaPy:
             )
             if len(err_msg) > 0:
                 raise InstaPyError(err_msg)
+
+    def seed_users(self, n_users):
+        """
+            Seed n_users from our seedPool file to interact with,
+            and update the file.
+        """
+        user_file = f"{self.logfolder}{self.username}_seedPool.csv"
+        if os.path.isfile(user_file):
+            seed_df = pd.read_csv(user_file, sep=";")
+            available_users = seed_df.loc[~seed_df.seeded].user_to_seed
+            n_available = available_users.shape[0]
+            if n_users > n_available:
+                self.logger.info(f"Not enough usernames to interact with, got {n_available}")
+                usernames = n_available
+            else:
+                self.logger.info(f"Got {n_users} usernames to interact with!")
+                usernames = n_available[n_users]
+            seed_df.loc[seed_df.user_to_seed.isin(usernames), "seeded"] = True
+            seed_df.loc[seed_df.user_to_seed.isin(usernames), "seeded_at"] = datetime.now()
+            seed_df.to_csv(user_file, index=False, sep=";")
+            return usernames
+
+        self.logger.info("No usernames to interact with")
+        return []
+    
+    def extract_likers(self, usernames, photos_amount, likes_per_post, randomize=False):
+    
+        user_liked_list = []
+
+        for username in usernames:
+            if self.quotient_breach:
+                break
+
+            photo_urls = get_photo_urls_from_profile(
+                self.browser, username, photos_amount, randomize, self.logger
+            )
+            sleep(1)
+            if not isinstance(photo_urls, list):
+                photo_urls = [photo_urls]
+
+            for photo_url in photo_urls:
+                if self.quotient_breach:
+                    break
+
+                likers = users_liked(
+                    self.browser, photo_url, likes_per_post, self.logger
+                )
+                user_liked_list += likers
+
+        return user_liked_list
+    
+    def extract_commenters(self, usernames, photos_amount, daysold):
+
+        for username in usernames:
+
+            if self.quotient_breach:
+                break
+
+            commenters = extract_information(
+                self.browser, 
+                username, 
+                daysold,
+                photos_amount,
+                self.logger,
+            )
+
+            logtime = datetime.now().strftime("%Y-%m-%d %H:%M")
+            for commenter in commenters:
+                
+                log_record_seed_username(
+                    self.username, username, commenter,
+                    self.logger, self.logfolder, logtime,
+                )
 
     def get_instapy_logger(self, show_logs: bool, log_handler=None):
         """
@@ -1343,6 +1452,34 @@ class InstaPy:
         self.min_posts = min_posts if enabled is True else None
         self.max_posts = max_posts if enabled is True else None
 
+    def set_follow_relationship_bounds(
+        self,
+        enabled: bool = False,
+        potency_ratio: float = None,
+        delimit_by_numbers: bool = None,
+        min_posts: int = None,
+        max_posts: int = None,
+        max_followers: int = None,
+        max_following: int = None,
+        min_followers: int = None,
+        min_following: int = None,
+    ):
+        """Sets the potency ratio and limits to the provide an efficient
+        activity between the targeted masses"""
+
+        self.follow_potency_ratio = potency_ratio if enabled is True else None
+        self.follow_delimit_by_numbers = delimit_by_numbers if enabled is True else None
+
+        self.follow_max_followers = max_followers
+        self.follow_min_followers = min_followers
+
+        self.follow_max_following = max_following
+        self.follow_min_following = min_following
+
+        self.follow_min_posts = min_posts if enabled is True else None
+        self.follow_max_posts = max_posts if enabled is True else None
+
+
     def validate_user_call(self, user_name: str):
         """ Short call of validate_username() function """
         validation, details = validate_username(
@@ -1371,7 +1508,38 @@ class InstaPy:
             self.skip_bio_keyword,
             self.mandatory_bio_keywords,
             self.logger,
-            self.logfolder,
+            self.logfolder, 
+        )
+        return validation, details
+    
+    def follow_validate_user_call(self, user_name):
+        validation, details = validate_username(
+            self.browser,
+            user_name,
+            self.username,
+            ignore_users=self.ignore_users,
+            blacklist=self.blacklist,
+            potency_ratio=self.follow_potency_ratio,
+            delimit_by_numbers=self.follow_delimit_by_numbers,
+            max_followers=self.follow_max_followers,
+            max_following=self.follow_max_following,
+            min_followers=self.follow_min_followers,
+            min_following=self.follow_min_following,
+            min_posts=self.follow_min_posts,
+            max_posts=self.follow_max_posts,
+            skip_private=self.follow_skip_private,
+            skip_private_percentage=self.follow_skip_private_percentage,
+            skip_no_profile_pic=self.follow_skip_no_profile_pic,
+            skip_no_profile_pic_percentage=self.follow_skip_no_profile_pic_percentage,
+            skip_business=self.follow_skip_business,
+            skip_non_business=self.follow_skip_non_business,
+            skip_business_percentage=self.follow_skip_business_percentage,
+            skip_business_categories=self.follow_skip_business_categories,
+            dont_skip_business_categories=self.follow_dont_skip_business_categories,
+            skip_bio_keyword=self.follow_skip_bio_keyword,
+            mandatory_bio_keywords=self.follow_mandatory_bio_keywords,
+            logger=self.logger,
+            logfolder=self.logfolder,
         )
         return validation, details
 
@@ -1425,6 +1593,30 @@ class InstaPy:
                     )
                     # dont_skip_business_categories = [] Setted by default
                     # in init
+
+    def set_follow_skip_users(
+        self,
+        skip_private: bool = True,
+        private_percentage: int = 100,
+        skip_no_profile_pic: bool = False,
+        no_profile_pic_percentage: int = 100,
+        skip_business: bool = False,
+        business_percentage: int = 100,
+        skip_business_categories: list = [],
+        dont_skip_business_categories: list = [],
+        skip_non_business: bool = False,
+        skip_bio_keyword: list = [],
+        mandatory_bio_keywords: list = [],
+    ):
+        self.follow_skip_business = skip_business
+        self.follow_skip_private = skip_private
+        self.follow_skip_no_profile_pic = skip_no_profile_pic
+        self.follow_skip_business_percentage = business_percentage
+        self.follow_skip_no_profile_pic_percentage = no_profile_pic_percentage
+        self.follow_skip_private_percentage = private_percentage
+        self.follow_skip_non_business = skip_non_business
+        self.follow_skip_bio_keyword = skip_bio_keyword
+        self.follow_mandatory_bio_keywords = mandatory_bio_keywords
 
     def set_delimit_liking(
         self, enabled: bool = False, max_likes: int = None, min_likes: int = None
@@ -2800,6 +2992,7 @@ class InstaPy:
                     and self.do_follow
                     and not_dont_include
                     and not follow_restricted
+                    and self.follow_validate_user_call(username)[0]
                 )
                 commenting = (
                     random.randint(0, 100) <= self.comment_percentage
@@ -5460,6 +5653,8 @@ class InstaPy:
                     )
                     like_failures_tracker["consequent"]["post_likes"] += 1
                     continue
+
+                view_all_comments(self.browser, comments_per_post, self.logger)
 
                 # perfect! now going to work with comments...
                 for commenter, comment in comment_data:

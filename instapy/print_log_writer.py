@@ -1,4 +1,6 @@
 """Module only used to log the number of followers to a file"""
+import os
+import csv
 from datetime import datetime
 
 from .time_util import sleep
@@ -137,3 +139,31 @@ def log_record_all_followed(login, followed, logger, logfolder, logtime, user_id
                 followPool.write("{} ~ {} ~ {},\n".format(logtime, followed, user_id))
     except BaseException as e:
         logger.error("log_record_all_followed_pool error {}".format(str(e)))
+
+
+def log_record_seed_username(
+        login, user_scraped_from, user_to_seed, 
+        logger, logfolder, logtime
+    ):
+    """
+        Log scraped users, to seed later
+    """
+    filename = f"{logfolder}{login}_seedPool.csv"
+    fields = ["scraped_at", "user_scraped_from", "user_to_seed", "seeded", "seeded_at"]
+    if not os.path.isfile(filename):
+        writer = csv.DictWriter(open(filename, "w+"), fieldnames=fields, delimiter=";")
+        writer.writeheader()
+    try:
+        with open(filename, "a+") as seedPool:
+            with interruption_handler():
+                writer = csv.DictWriter(seedPool, fieldnames=fields, delimiter=';')
+                writer.writerow({
+                    "scraped_at": logtime,
+                    "user_scraped_from": user_scraped_from,
+                    "user_to_seed": user_to_seed,
+                    "seeded": False,
+                    "seeded_at": None,
+                })
+
+    except BaseException as e:
+        logger.error("log_seed_pool error {}".format(str(e)))
